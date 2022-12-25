@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js">
+  </script>
+    <script language="javascript" type="text/javascript">
+      $(function() {
+        var conn = null;
+        function log(msg) {
+          var control = $('#log');
+          control.html(control.html() + msg + '<br/>');
+          control.scrollTop(control.scrollTop() + 1000);
+        }
+        function send_news(msg) {
+          const newsControl = $('#news');
+          let dataPost = JSON.parse(msg)
+          let postObj = `<span style="padding-left: 5px; display: block">
+                            <h3>${dataPost.title}</h3>
+                            <p>${dataPost.text}</p>
+                            <p>${dataPost.date}</p>
+                            <hr/>
+                        </span>`
+          newsControl.html(newsControl.html() + postObj);
+          newsControl.scrollTop(newsControl.scrollTop() + 1000);
+        }
+        function connect() {
+          disconnect(); // разрываем соединение если функция вызвана по-ошибке
+          var wsUri = (window.location.protocol=='https:'&&'wss://'||'ws://')+window.location.host;
+          conn = new WebSocket(wsUri); //открываем соединение
+          log('Подписываемся на новости...');
+          conn.onopen = function() {
+            $('#news').html('')
+            log('Подписан.');
+            update_ui();
+          };
+          conn.onmessage = function(e) {
+            send_news(e.data);
+          };
+          conn.onclose = function(e) {
+            if (e.code === 1000) {
+              log('Подписка отключена.');
+            }
+            conn = null;
+            if (e.code !== 1000) {
+              log('Ошибка ' + e.code + ' ' + e.reason)
+              log('Автоматическое переподключение через 1 сек.');
+              setTimeout(function () {
+                connect();
+              }, 1000)
+            }
+            update_ui();
+          };
+        }
+        function disconnect() {
+          if (conn != null) {
+            log('Отписываемся от новостей...');
+            conn.close(1000, 'Отписка');
+            conn = null;
+            update_ui();
+          }
+        }
+        function update_ui() {
+          if (conn == null) {
+            $('#status').text('Не подписан');
+            $('#connect').html('Подписаться');
+          } else {
+            $('#status').text('Подписан');
+            $('#connect').html('Отписаться');
+          }
+        }
+        $('#connect').click(function() {
+          if (conn == null) {
+            connect();
+          } else {
+            disconnect();
+          }
+          update_ui();
+          return false;
+        });
+        $('#send').click(function() {
+          var form = new FormData();
+          form.append("title", $('#title').val());
+          form.append("text", $('#text').val());
+
+          var requestOptions = {
+            method: 'POST',
+            body: form,
+            redirect: 'follow'
+          };
+
+          fetch("http://localhost:8080/post", requestOptions)
+            .then(response => response.text())
+            .then(result => console.log(result))
+            .catch(error => console.log('error', error));
+          $('#title').val('').focus();
+          return false;
+        });
+        $('#text').keyup(function(e) {
+          if (e.keyCode === 13) {
+            $('#send').click();
+            return false;
+          }
+        });
+      });
+  </script>
+</head>
+<body>
+<h3>Новости</h3>
+<div>
+  <button id="connect">Подписаться</button>&nbsp;|&nbsp;Статус подписки:
+  <span id="status">Не подписан</span>
+</div>
+<div style="display: flex">
+  <div id="log"
+     style="width:20%;height:15em;overflow:auto;border:1px solid black">
+  </div>
+  <div id="news"
+    style="width:70%;height:15em;overflow:auto;border:1px solid black; margin-left: 5px">
+  </div>
+</div>
+
+<form id="chatform" onsubmit="return false;" style="margin-top: 5px">
+  <input id="title" type="text" placeholder="Заголовок"/>
+  <input id="text" type="text" placeholder="Текст"/>
+  <input id="send" type="button" value="Отправить (POST)" />
+</form>
+</body>
+</html>
